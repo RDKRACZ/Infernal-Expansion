@@ -14,17 +14,26 @@
  * limitations under the License.
  */
 
-package org.infernalstudios.infernalexp.mixin;
+package org.infernalstudios.infernalexp.items;
 
-import org.spongepowered.asm.mixin.Mixins;
-import org.spongepowered.asm.mixin.connect.IMixinConnector;
+import net.minecraft.item.Item;
+import net.minecraft.util.SoundEvent;
+import net.minecraft.util.SoundEvents;
 
-public class MixinConnector implements IMixinConnector {
+import java.util.Properties;
 
-    @Override
-    public void connect() {
-        Mixins.addConfiguration("infernal-expansion.mixins.json");
+public class SlurpItem extends Item {
+    public SlurpItem(Properties builder) {
+        super(builder);
     }
 
+    @Override
+    public SoundEvent getDrinkSound() {
+        return SoundEvents.ITEM_HONEY_BOTTLE_DRINK;
+    }
 
+    @Override
+    public SoundEvent getEatSound() {
+        return SoundEvents.ITEM_HONEY_BOTTLE_DRINK;
+    }
 }

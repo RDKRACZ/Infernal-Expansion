@@ -23,6 +23,7 @@ import net.minecraft.block.material.Material;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentType;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.enchantment.IVanishable;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -34,6 +35,7 @@ import net.minecraft.entity.projectile.ProjectileHelper;
 import net.minecraft.inventory.EquipmentSlotType;
 import net.minecraft.item.IItemTier;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.TieredItem;
 import net.minecraft.item.UseAction;
@@ -42,6 +44,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
+import net.minecraft.util.NonNullList;
 import net.minecraft.util.SoundCategory;
 import net.minecraft.util.SoundEvents;
 import net.minecraft.util.math.AxisAlignedBB;
@@ -59,6 +62,7 @@ import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import org.infernalstudios.infernalexp.capabilities.IWhipUpdate;
 import org.infernalstudios.infernalexp.capabilities.WhipUpdateCapability;
+import org.infernalstudios.infernalexp.init.IEItems;
 import org.infernalstudios.infernalexp.network.IENetworkHandler;
 import org.infernalstudios.infernalexp.network.WhipReachPacket;
 
@@ -78,7 +82,19 @@ public class WhipItem extends TieredItem implements IVanishable {
 
     @Override
     public void addInformation(ItemStack stack, @Nullable World worldIn, List<ITextComponent> tooltip, ITooltipFlag flagIn) {
-        tooltip.add(new StringTextComponent("\u00A76" + "Hold right click to charge, then, when fully charged, release to strike!"));
+        tooltip.add(new StringTextComponent("\u00A76Hold right click to charge, then when fully charged, release to strike!"));
+    }
+
+    @Override
+    public void fillItemGroup(ItemGroup group, NonNullList<ItemStack> items) {
+        if (isInGroup(group)) {
+            ItemStack itemStack = new ItemStack(this);
+            if (itemStack.isItemEqual(IEItems.KINETIC_TONGUE_WHIP.get().getDefaultInstance())) {
+                itemStack.addEnchantment(Enchantments.KNOCKBACK, 3);
+            }
+
+            items.add(itemStack);
+        }
     }
 
     @Override
@@ -102,37 +118,9 @@ public class WhipItem extends TieredItem implements IVanishable {
             playerEntity.addStat(Stats.ITEM_USED.get(this));
 
             if (worldIn.isRemote()) {
-                handleExtendedReach(playerEntity, stack);
+                IENetworkHandler.sendToServer(new WhipReachPacket(playerEntity.getUniqueID()));
             }
         }
-    }
-
-    @OnlyIn(Dist.CLIENT)
-    private boolean handleExtendedReach(PlayerEntity player, ItemStack stack) {
-
-        // Change the value added here to adjust the reach of the charge attack of the whip, must also be changed in WhipReachPacket
-        double reach = player.getAttribute(ForgeMod.REACH_DISTANCE.get()).getValue() + 1.0D;
-
-        Vector3d eyePos = player.getEyePosition(1.0F);
-        Vector3d lookVec = player.getLookVec();
-        Vector3d reachVec = eyePos.add(lookVec.mul(reach, reach, reach));
-
-        AxisAlignedBB playerBox = player.getBoundingBox().expand(lookVec.scale(reach)).grow(1.0D, 1.0D, 1.0D);
-        EntityRayTraceResult entityTraceResult = ProjectileHelper.rayTraceEntities(player, eyePos, reachVec, playerBox, (target) -> !target.isSpectator() && target.isLiving(), reach * reach);
-        BlockRayTraceResult blockTraceResult = player.getEntityWorld().rayTraceBlocks(new RayTraceContext(eyePos, reachVec, RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.NONE, player));
-
-        if (entityTraceResult != null) {
-            double distance = eyePos.squareDistanceTo(entityTraceResult.getHitVec());
-
-            if (distance < reach * reach && distance < eyePos.squareDistanceTo(blockTraceResult.getHitVec())) {
-                player.ticksSinceLastSwing = (int) player.getCooldownPeriod();
-                IENetworkHandler.sendToServer(new WhipReachPacket(player.getUniqueID(), entityTraceResult.getEntity().getEntityId(), stack));
-
-                return true;
-            }
-        }
-
-        return false;
     }
 
     @Override
@@ -148,7 +136,9 @@ public class WhipItem extends TieredItem implements IVanishable {
     @Override
     public ActionResult<ItemStack> onItemRightClick(World worldIn, PlayerEntity playerIn, Hand handIn) {
         ItemStack itemstack = playerIn.getHeldItem(handIn);
-        playerIn.setActiveHand(handIn);
+        if (handIn.equals(Hand.MAIN_HAND)) {
+            playerIn.setActiveHand(handIn);
+        }
         return ActionResult.resultPass(itemstack);
     }
 
@@ -184,18 +174,15 @@ public class WhipItem extends TieredItem implements IVanishable {
     public boolean hitEntity(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         super.hitEntity(stack, target, attacker);
 
-        stack.damageItem(1, attacker, (entity) -> {
-            entity.sendBreakAnimation(EquipmentSlotType.MAINHAND);
-        });
+
+        stack.damageItem(1, attacker, (entity) -> entity.sendBreakAnimation(EquipmentSlotType.MAINHAND));
         return true;
     }
 
     @Override
     public boolean onBlockDestroyed(ItemStack stack, World worldIn, BlockState state, BlockPos pos, LivingEntity entityLiving) {
         if (state.getBlockHardness(worldIn, pos) != 0.0F) {
-            stack.damageItem(2, entityLiving, (entity) -> {
-                entity.sendBreakAnimation(EquipmentSlotType.MAINHAND);
-            });
+            stack.damageItem(2, entityLiving, (entity) -> entity.sendBreakAnimation(EquipmentSlotType.MAINHAND));
         }
 
         return true;
